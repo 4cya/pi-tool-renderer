@@ -5,7 +5,7 @@
 
 Compact renderers for Pi tools. Optional `tool_batch` composite tool. Optional rich diff UI for edits, writes, and bash patches.
 
-> **Forked from [@vanillagreen/pi-tool-renderer](https://github.com/vanillagreencom/vstack/tree/main/pi-extensions/pi-tool-renderer)** — part of the [vstack](https://github.com/vanillagreencom/vstack) cross-harness package manager for AI coding tools (Claude Code, Cursor, OpenCode, Codex, Pi).
+> Originally forked from [@vanillagreen/pi-tool-renderer](https://github.com/vanillagreencom/vstack/tree/main/pi-extensions/pi-tool-renderer) — part of the [vstack](https://github.com/vanillagreencom/vstack) project. Now a standalone Pi extension with no vstack dependency.
 
 ## Highlights
 
@@ -22,26 +22,22 @@ Defaults leave `edit`/`write` on Pi's built-in renderers. Enable **Render edits/
 
 ## Install
 
-### Via Git (recommended for this fork)
-
 ```bash
 pi install git:github.com/4cya/pi-tool-renderer@main
 ```
 
-### Via npm (upstream)
+Restart Pi after installation.
+
+### Alternative upstream installs
 
 ```bash
+# npm (upstream)
 pi install npm:@vanillagreen/pi-tool-renderer
-```
 
-### Via vstack (upstream)
-
-```bash
+# vstack (upstream)
 cargo install --git https://github.com/vanillagreencom/vstack.git vstack
 vstack add vanillagreencom/vstack --pi-extension pi-tool-renderer --harness pi -y
 ```
-
-Restart Pi after installation.
 
 ## `tool_batch`
 
@@ -62,11 +58,23 @@ If the combined output would exceed Pi's normal tool-result budget, child output
 
 ## Settings
 
-Open `/extensions:settings`; settings appear under the **Tool Renderer** tab.
+Configure via a standalone JSON file at `~/.pi/agent/pi-tool-renderer.json`:
 
-Project settings in `.pi/settings.json` apply only after Pi marks the workspace trusted; before trust, vstack Pi extensions read user/global settings only.
+```json
+{
+  "enabled": true,
+  "bashOutputMode": "opencode",
+  "registerBatchTool": true,
+  "toolChrome": "outlines",
+  "compactUserMessages": true,
+  "rightMarginGuard": true,
+  "readOutputMode": "preview",
+  "searchOutputMode": "preview",
+  "mcpOutputMode": "preview"
+}
+```
 
-Glyph style: each package exposes `glyphStyle` (`unicode` default, `ascii` for terminal-safe chrome). `pi-tool-renderer.globalGlyphStyleOverride=ascii` forces ASCII chrome across vstack Pi extensions while leaving tool/model/user content unchanged.
+All settings are flat top-level keys with sensible defaults. Missing keys fall back to defaults listed below.
 
 ### General
 

@@ -260,7 +260,7 @@ export function registerToolBatch(pi: ExtensionAPI, agent: any, cwd: string): vo
 		async execute(toolCallId: string, params: any, signal: AbortSignal | undefined, _onUpdate: unknown, context: any) {
 			const effectiveCwd = contextCwd(context, cwd);
 			const calls = normalizeBatchCalls(params?.calls);
-			const maxCalls = Math.max(1, Math.floor(settingNumber("batchMaxCalls", 8, effectiveCwd)));
+			const maxCalls = Math.max(1, Math.floor(settingNumber("batchMaxCalls", 8)));
 			if (calls.length === 0) return { content: [{ type: "text", text: "No valid calls provided." }], details: { failed: 0, items: [], succeeded: 0, total: 0 } };
 			if (calls.length > maxCalls) {
 				return {
@@ -270,13 +270,13 @@ export function registerToolBatch(pi: ExtensionAPI, agent: any, cwd: string): vo
 				};
 			}
 			const concurrency = Math.max(1, Math.min(calls.length, Math.floor(Number(params?.concurrency) || calls.length), maxCalls));
-			// vstack#96: per-call timeout so a single wedged inner tool can't block the
+			// per-call timeout so a single wedged inner tool can't block the
 			// aggregate forever. Default 120s, minimum 1s. Each inner gets its own
 			// AbortController so timeout aborts only that call (parent abort still
 			// propagates to all children via the addEventListener bridge).
 			const batchCallTimeoutMs = Math.max(
 				TOOL_BATCH_MIN_CALL_TIMEOUT_MS,
-				Math.floor(settingNumber("batchCallTimeoutMs", TOOL_BATCH_DEFAULT_CALL_TIMEOUT_MS, effectiveCwd)),
+				Math.floor(settingNumber("batchCallTimeoutMs", TOOL_BATCH_DEFAULT_CALL_TIMEOUT_MS)),
 			);
 			const items = await mapBatchWithConcurrency(calls, concurrency, async (call, index): Promise<BatchToolItem> => {
 				const childController = new AbortController();

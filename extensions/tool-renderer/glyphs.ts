@@ -1,96 +1,20 @@
-import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { dirname, join, resolve } from "node:path";
+import { settingEnum, settingBoolean } from "./settings.js";
 
 export type GlyphStyle = "unicode" | "ascii";
 export type GlobalGlyphStyleOverride = "inherit" | GlyphStyle;
-
-const LOCAL_CONFIG_ID = "@vanillagreen/pi-tool-renderer";
-const GLOBAL_CONFIG_ID = "@vanillagreen/pi-tool-renderer";
-
-function expandHome(input: string): string {
-	if (input === "~") return homedir();
-	if (input.startsWith("~/")) return join(homedir(), input.slice(2));
-	return input;
-}
-
-function projectSettingsPath(cwd: string): string {
-	let current = resolve(cwd);
-	while (true) {
-		const candidate = join(current, ".pi", "settings.json");
-		if (existsSync(candidate)) return candidate;
-		if (existsSync(join(current, ".pi")) || existsSync(join(current, ".git")) || existsSync(join(current, ".vstack-lock.json"))) return candidate;
-		const parent = dirname(current);
-		if (parent === current) return join(resolve(cwd), ".pi", "settings.json");
-		current = parent;
-	}
-}
-
-const PROJECT_TRUST_SYMBOL = Symbol.for("vstack.pi.project-trust");
-
-interface ProjectTrustRegistry {
-	projectSettings?: Map<string, boolean>;
-}
-
-function projectTrustRegistry(): ProjectTrustRegistry {
-	const host = globalThis as unknown as Record<PropertyKey, ProjectTrustRegistry | undefined>;
-	const existing = host[PROJECT_TRUST_SYMBOL];
-	if (existing) return existing;
-	const created: ProjectTrustRegistry = {};
-	host[PROJECT_TRUST_SYMBOL] = created;
-	return created;
-}
-
-export function recordProjectTrust(ctx: { cwd?: string; isProjectTrusted?: () => boolean }): void {
-	if (!ctx.cwd) return;
-	let trusted = true;
-	try {
-		trusted = ctx.isProjectTrusted?.() === true;
-	} catch {
-		trusted = false;
-	}
-	const registry = projectTrustRegistry();
-	if (!registry.projectSettings) registry.projectSettings = new Map();
-	registry.projectSettings.set(projectSettingsPath(ctx.cwd), trusted);
-}
-
-function projectSettingsTrusted(settingsPath: string): boolean {
-	return projectTrustRegistry().projectSettings?.get(settingsPath) === true;
-}
-
-
-function piSettingsPaths(cwd = process.cwd()): string[] {
-	const userDir = resolve(expandHome(process.env.PI_CODING_AGENT_DIR?.trim() || "~/.pi/agent"));
-	const user = join(userDir, "settings.json");
-	const project = projectSettingsPath(cwd);
-	return projectSettingsTrusted(project) ? [user, project] : [user];
-}
-
-function readPackageConfig(packageId: string, cwd?: string): Record<string, unknown> {
-	const merged: Record<string, unknown> = {};
-	for (const settingsPath of piSettingsPaths(cwd)) {
-		if (!existsSync(settingsPath)) continue;
-		try {
-			const parsed = JSON.parse(readFileSync(settingsPath, "utf8"));
-			const config = parsed?.vstack?.extensionManager?.config?.[packageId];
-			if (config && typeof config === "object" && !Array.isArray(config)) Object.assign(merged, config);
-		} catch {
-			// Ignore malformed optional manager config.
-		}
-	}
-	return merged;
-}
 
 function asGlyphStyle(value: unknown): GlyphStyle | undefined {
 	return value === "unicode" || value === "ascii" ? value : undefined;
 }
 
-export function glyphStyle(cwd?: string): GlyphStyle {
-	const globalOverride = readPackageConfig(GLOBAL_CONFIG_ID, cwd).globalGlyphStyleOverride;
-	const forced = asGlyphStyle(globalOverride);
+/** Read glyph style from the standalone config file. */
+export function glyphStyle(): GlyphStyle {
+	const globalOverride = settingEnum("globalGlyphStyleOverride", ["inherit", "unicode", "ascii"] as const, "inherit");
+	const forced = asGlyphStyle(globalOverride === "inherit" ? undefined : globalOverride);
 	if (forced) return forced;
-	const local = readPackageConfig(LOCAL_CONFIG_ID, cwd);
-	return asGlyphStyle(local.glyphStyle) ?? asGlyphStyle(local.treeStyle) ?? "unicode";
+	return asGlyphStyle(settingEnum("glyphStyle", ["unicode", "ascii"] as const, "unicode"))
+		?? asGlyphStyle(settingEnum("treeStyle", ["unicode", "ascii"] as const, "unicode"))
+		?? "unicode";
 }
 
 export const GLYPHS = {
@@ -128,30 +52,30 @@ export const GLYPHS = {
 	},
 } as const;
 
-export function glyphs(cwd?: string): (typeof GLYPHS)[GlyphStyle] {
-	return GLYPHS[glyphStyle(cwd)];
+export function glyphs(): (typeof GLYPHS)[GlyphStyle] {
+	return GLYPHS[glyphStyle()];
 }
 
-export function truncateIndicator(cwd?: string): string {
-	return glyphs(cwd).ellipsis;
+export function truncateIndicator(): string {
+	return glyphs().ellipsis;
 }
 
-export function truncateText(text: string, maxChars: number, cwd?: string): string {
+export function truncateText(text: string, maxChars: number): string {
 	if (text.length <= maxChars) return text;
-	const indicator = truncateIndicator(cwd);
+	const indicator = truncateIndicator();
 	return `${text.slice(0, Math.max(0, maxChars - indicator.length))}${indicator}`;
 }
 
-export function dot(cwd?: string): string {
-	return glyphs(cwd).dot;
+export function dot(): string {
+	return glyphs().dot;
 }
 
-export function treeGlyph(branch: "├" | "└" | "│", cwd?: string): string {
-	const tree = glyphs(cwd).tree;
+export function treeGlyph(branch: "├" | "└" | "│"): string {
+	const tree = glyphs().tree;
 	if (branch === "│") return tree.stem;
 	return branch === "└" ? tree.last : tree.mid;
 }
 
-export function frameGlyphs(cwd?: string): (typeof GLYPHS)[GlyphStyle]["frame"] {
-	return glyphs(cwd).frame;
+export function frameGlyphs(): (typeof GLYPHS)[GlyphStyle]["frame"] {
+	return glyphs().frame;
 }

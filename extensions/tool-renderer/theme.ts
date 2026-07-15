@@ -47,25 +47,25 @@ export function borderMuted(theme: any, text: string): string {
 
 export type TreeBranch = "├" | "└" | "│";
 
-export function treeGlyph(branch: TreeBranch, cwd?: string): string {
-	const glyph = configuredTreeGlyph(branch, cwd);
-	return glyphStyle(cwd) === "ascii" ? glyph : `  ${glyph}`;
+export function treeGlyph(branch: TreeBranch): string {
+	const glyph = configuredTreeGlyph(branch);
+	return glyphStyle() === "ascii" ? glyph : `  ${glyph}`;
 }
 
-export function treeConnector(theme: any, branch: TreeBranch = "├", cwd?: string): string {
-	return toolRule(theme, treeGlyph(branch, cwd));
+export function treeConnector(theme: any, branch: TreeBranch = "├"): string {
+	return toolRule(theme, treeGlyph(branch));
 }
 
-export function treeStem(theme: any, branch: TreeBranch, cwd?: string): string {
-	if (branch === "└") return theme.fg("muted", glyphStyle(cwd) === "ascii" ? "    " : "     ");
-	return treeConnector(theme, "│", cwd);
+export function treeStem(theme: any, branch: TreeBranch): string {
+	if (branch === "└") return theme.fg("muted", glyphStyle() === "ascii" ? "    " : "     ");
+	return treeConnector(theme, "│");
 }
 
 export function toolLabel(theme: any, label: string): string {
 	return theme.fg("text", theme.bold(label));
 }
 
-export function stackPrefix(theme: any, cwd?: string): string {
-	const bullet = glyphs(cwd).bullet;
+export function stackPrefix(theme: any): string {
+	const bullet = glyphs().bullet;
 	return fgToken(theme, "toolBullet", bullet, true) ?? fgToken(theme, "accent", bullet, true) ?? theme.fg("accent", bullet);
 }

@@ -25,10 +25,10 @@ import { settingBoolean, settingEnum, toolChromeMode } from "./settings.js";
 import { glyphs } from "./glyphs.js";
 import { subtleRule } from "./theme.js";
 
-const TOOL_EXECUTION_RENDERER_PATCH_SYMBOL = Symbol.for("vstack.pi-tool-renderer.tool-execution-renderer-patch.v2");
-const TOOL_CHROME_PATCH_SYMBOL = Symbol.for("vstack.pi-tool-renderer.tool-chrome-patch");
-const TOOL_CHROME_THEME_SYMBOL = Symbol.for("vstack.pi-tool-renderer.tool-chrome-theme");
-const WORKING_LOADER_ALIGNMENT_PATCH_SYMBOL = Symbol.for("vstack.pi-tool-renderer.working-loader-alignment-patch");
+const TOOL_EXECUTION_RENDERER_PATCH_SYMBOL = Symbol.for("pi-tool-renderer.tool-execution-renderer-patch.v2");
+const TOOL_CHROME_PATCH_SYMBOL = Symbol.for("pi-tool-renderer.tool-chrome-patch");
+const TOOL_CHROME_THEME_SYMBOL = Symbol.for("pi-tool-renderer.tool-chrome-theme");
+const WORKING_LOADER_ALIGNMENT_PATCH_SYMBOL = Symbol.for("pi-tool-renderer.working-loader-alignment-patch");
 
 export function rememberToolChromeTheme(component: any, theme: any): void {
 	if (theme?.fg) component[TOOL_CHROME_THEME_SYMBOL] = theme;
@@ -115,33 +115,29 @@ export function installToolExecutionRendererPatch(pi: ExtensionAPI): void {
 	});
 }
 
-function prepareToolChromeTheme(theme: any, cwd?: string): void {
-	if (toolChromeMode(cwd) === "off") return;
+function prepareToolChromeTheme(theme: any): void {
+	if (toolChromeMode() === "off") return;
 	captureDiffBackgroundTheme(theme);
 }
 
 let activeToolChromeCtx: ExtensionContext | undefined;
 
-function mutedHorizontalRule(theme: any, width: number, cwd?: string): string {
-	return subtleRule(theme, glyphs(cwd).line.repeat(stableRenderWidth(width, cwd)));
+function mutedHorizontalRule(theme: any, width: number): string {
+	return subtleRule(theme, glyphs().line.repeat(stableRenderWidth(width)));
 }
 
 function shouldOmitBottomToolChromeRule(core: string[]): boolean {
 	return core.some((line) => /(?:└─+(?:┴─+)?┘|\+-+(?:\+-+)?\+)/.test(stripAnsi(line ?? "")));
 }
 
-function renderedToolCore(rendered: string[], width: number, cwd?: string): string[] | undefined {
+function renderedToolCore(rendered: string[], width: number): string[] | undefined {
 	let start = 0;
 	while (start < rendered.length && stripAnsi(rendered[start] ?? "").trim().length === 0) start++;
 	let end = rendered.length - 1;
 	while (end >= start && stripAnsi(rendered[end] ?? "").trim().length === 0) end--;
 	if (start > end) return undefined;
-	const renderWidth = stableRenderWidth(width, cwd);
+	const renderWidth = stableRenderWidth(width);
 	return rendered.slice(start, end + 1).flatMap((line) => {
-		// Pi's Text/Box components pad rows before trailing SGR reset codes.
-		// Plain trimEnd() cannot see those spaces when ANSI comes after them;
-		// if they survive, the right-margin guard wraps each padded row into a
-		// blank continuation line. Trim visually trailing spaces before wrapping.
 		const wrapped = wrapTextWithAnsi(trimTrailingWhitespaceBeforeAnsi(stripLeadingBackgroundLayer(line)), renderWidth);
 		return wrapped.length > 0 ? wrapped : [""];
 	});
@@ -152,13 +148,12 @@ function toolChromeThemeFor(component: any): any {
 }
 
 function renderToolChromeLines(component: any, rendered: string[], width: number): string[] {
-	const effectiveCwd = component?.cwd ?? process.cwd();
-	const mode = toolChromeMode(effectiveCwd);
+	const mode = toolChromeMode();
 	if (mode === "off") return rendered;
-	const core = renderedToolCore(rendered, width, effectiveCwd);
+	const core = renderedToolCore(rendered, width);
 	if (!core) return rendered;
 	if (mode === "transparent") return core;
-	const rule = mutedHorizontalRule(toolChromeThemeFor(component), width, effectiveCwd);
+	const rule = mutedHorizontalRule(toolChromeThemeFor(component), width);
 	return shouldOmitBottomToolChromeRule(core) ? [rule, ...core] : [rule, ...core, rule];
 }
 
@@ -194,11 +189,11 @@ export function installToolChromePatch(): void {
 export function registerToolChromeEvents(pi: ExtensionAPI): void {
 	pi.on("session_start", (_event, ctx) => {
 		activeToolChromeCtx = ctx;
-		if (ctx.hasUI) prepareToolChromeTheme(ctx.ui.theme, ctx.cwd);
+		if (ctx.hasUI) prepareToolChromeTheme(ctx.ui.theme);
 	});
 	pi.on("turn_start", (_event, ctx) => {
 		activeToolChromeCtx = ctx;
-		if (ctx.hasUI) prepareToolChromeTheme(ctx.ui.theme, ctx.cwd);
+		if (ctx.hasUI) prepareToolChromeTheme(ctx.ui.theme);
 	});
 	pi.on("session_shutdown", () => {
 		activeToolChromeCtx = undefined;
@@ -208,13 +203,13 @@ export function registerToolChromeEvents(pi: ExtensionAPI): void {
 export function installWorkingIndicator(pi: ExtensionAPI): void {
 	pi.on("session_start", (_event, ctx) => {
 		if (!ctx.hasUI) return;
-		const mode = settingEnum("workingIndicator", ["default", "pulse", "hidden"] as const, "default", ctx.cwd);
+		const mode = settingEnum("workingIndicator", ["default", "pulse", "hidden"] as const, "default");
 		if (mode === "default") return;
 		if (mode === "hidden") {
 			ctx.ui.setWorkingIndicator({ frames: [] });
 			return;
 		}
-		const g = glyphs(ctx.cwd);
+		const g = glyphs();
 		ctx.ui.setWorkingIndicator({
 			frames: [ctx.ui.theme.fg("dim", g.dot.trim()), ctx.ui.theme.fg("muted", g.emptyBullet.trim()), ctx.ui.theme.fg("accent", g.bullet.trim()), ctx.ui.theme.fg("muted", g.emptyBullet.trim())],
 			intervalMs: 120,

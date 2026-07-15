@@ -977,7 +977,7 @@ export function attachDiffDetails(result: any, before: string | undefined, after
 	const newText = after ?? "";
 	if (oldText === newText) return result;
 	const diff = { ...buildStructuredDiff(oldText, newText), path };
-	const extra = { vstackDiff: diff, vstackDiffWasNewFile: before === undefined };
+	const extra = { toolDiff: diff, diffWasNewFile: before === undefined };
 	result.details = result?.details && typeof result.details === "object" ? { ...result.details, ...extra } : extra;
 	return result;
 }

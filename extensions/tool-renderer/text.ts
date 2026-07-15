@@ -69,15 +69,15 @@ export function textContent(result: any): string {
 	return part?.text ?? "";
 }
 
-export function clipLine(line: string, cwd?: string): string {
-	const max = Math.max(40, Math.floor(settingNumber("maxLineWidth", 1000, cwd)));
-	return truncateText(line, max, cwd);
+export function clipLine(line: string): string {
+	const max = Math.max(40, Math.floor(settingNumber("maxLineWidth", 1000)));
+	return truncateText(line, max);
 }
 
-export function preview(text: string, count: number, direction: "head" | "tail", cwd?: string): string {
+export function preview(text: string, count: number, direction: "head" | "tail"): string {
 	const lines = text.split(/\r?\n/);
 	const selected = direction === "head" ? lines.slice(0, count) : lines.slice(-count);
-	return selected.map((line) => clipLine(line, cwd)).join("\n");
+	return selected.map((line) => clipLine(line)).join("\n");
 }
 
 export function commandExit(text: string): number | null {
@@ -167,26 +167,26 @@ export function clearBlink(context: any): void {
 	}
 }
 
-export function blinkingPrefix(theme: any, context: any, cwd?: string): string {
+export function blinkingPrefix(theme: any, context: any): string {
 	trackBlink(context);
 	const on = Math.floor(Date.now() / 450) % 2 === 0;
-	const g = glyphs(context?.cwd ?? cwd);
+	const g = glyphs();
 	return theme.fg(on ? "success" : "muted", on ? g.bullet : g.emptyBullet);
 }
 
-export function pendingStatusPrefix(theme: any, context: any, cwd?: string): string {
-	if (pendingStatusAnimation(context?.cwd ?? cwd)) return blinkingPrefix(theme, context, cwd);
+export function pendingStatusPrefix(theme: any, context: any): string {
+	if (pendingStatusAnimation()) return blinkingPrefix(theme, context);
 	clearBlink(context);
-	return theme.fg("warning", glyphs(context?.cwd ?? cwd).bullet);
+	return theme.fg("warning", glyphs().bullet);
 }
 
-export function renderPendingCall(call: string, theme: any, context: any, cwd?: string): TruncatedLines | ReturnType<typeof makeEmpty> {
-	if (!context?.executionStarted || !context?.isPartial || stackToolCalls(context?.cwd ?? cwd)) return makeEmpty();
-	return makeTruncatedLines(`${pendingStatusPrefix(theme, context, cwd)}${call}`);
+export function renderPendingCall(call: string, theme: any, context: any): TruncatedLines | ReturnType<typeof makeEmpty> {
+	if (!context?.executionStarted || !context?.isPartial || stackToolCalls()) return makeEmpty();
+	return makeTruncatedLines(`${pendingStatusPrefix(theme, context)}${call}`);
 }
 
-export function renderPendingDetail(text: string, theme: any, cwd?: string): TruncatedLines {
-	return makeTruncatedLines(`${treeConnector(theme, "└", cwd)}${theme.fg("warning", text)}`);
+export function renderPendingDetail(text: string, theme: any): TruncatedLines {
+	return makeTruncatedLines(`${treeConnector(theme, "└")}${theme.fg("warning", text)}`);
 }
 
 const NF_DIR = "";
@@ -237,8 +237,8 @@ const ICON_BY_EXT: Record<string, string> = {
 };
 
 
-export function nerdIcon(pathText: string, isDirectory = false, theme?: any, cwd?: string): string {
-	if (glyphs(cwd).line === "-") return theme?.fg ? theme.fg(isDirectory ? "accent" : "muted", isDirectory ? "d" : "f") : (isDirectory ? "d" : "f");
+export function nerdIcon(pathText: string, isDirectory = false, theme?: any): string {
+	if (glyphs().line === "-") return theme?.fg ? theme.fg(isDirectory ? "accent" : "muted", isDirectory ? "d" : "f") : (isDirectory ? "d" : "f");
 	if (isDirectory) return theme?.fg ? theme.fg("accent", NF_DIR) : NF_DIR;
 	const clean = stripAnsi(pathText).trim().replace(/\/$/, "");
 	const name = basename(clean).toLowerCase();
@@ -247,23 +247,23 @@ export function nerdIcon(pathText: string, isDirectory = false, theme?: any, cwd
 	return theme?.fg ? theme.fg(token, icon) : icon;
 }
 
-export function renderPathListPreview(output: string, toolName: "find" | "ls", theme: any, expanded: boolean, cwd?: string): string {
+export function renderPathListPreview(output: string, toolName: "find" | "ls", theme: any, expanded: boolean): string {
 	const rawItems = output.split(/\r?\n/).filter((line) => line.trim().length > 0);
 	if (rawItems.length === 0) return theme.fg("muted", toolName === "ls" ? "empty directory" : "no files found");
-	const limit = Math.max(1, Math.floor(settingNumber("searchPreviewLines", 80, cwd)));
+	const limit = Math.max(1, Math.floor(settingNumber("searchPreviewLines", 80)));
 	const shown = rawItems.slice(0, expanded ? limit : Math.min(limit, 12));
 	const lines = shown.map((item, index) => {
 		const clean = stripAnsi(item).trim();
 		const isDir = clean.endsWith("/");
 		const branch = index === shown.length - 1 && shown.length === rawItems.length ? "└" : "├";
-		const icon = nerdIcon(clean, isDir, theme, cwd);
+		const icon = nerdIcon(clean, isDir, theme);
 		const label = isDir ? theme.fg("accent", theme.bold(clean)) : theme.fg("dim", clean);
-		return `${treeConnector(theme, branch as "├" | "└", cwd)}${icon} ${label}`;
+		return `${treeConnector(theme, branch as "├" | "└")}${icon} ${label}`;
 	});
 	const remaining = rawItems.length - shown.length;
 	if (remaining > 0) {
 		const noun = toolName === "ls" ? (remaining === 1 ? "entry" : "entries") : `file${remaining === 1 ? "" : "s"}`;
-		lines.push(`${treeConnector(theme, "└", cwd)}${theme.fg("muted", `${glyphs(cwd).ellipsis} ${remaining} more ${noun}`)}`);
+		lines.push(`${treeConnector(theme, "└")}${theme.fg("muted", `${glyphs().ellipsis} ${remaining} more ${noun}`)}`);
 	}
 	return lines.join("\n");
 }
@@ -276,28 +276,28 @@ export function shortenPath(pathText: string): string {
 	return pathText;
 }
 
-export function linkPath(styledText: string, rawPath: string, cwd?: string, hyperlinks = getCapabilities().hyperlinks): string {
+export function linkPath(styledText: string, rawPath: string, hyperlinks = getCapabilities().hyperlinks): string {
 	if (!hyperlinks) return styledText;
-	const absolutePath = resolvePath(cwd || process.cwd(), rawPath || ".");
+	const absolutePath = resolvePath(process.cwd(), rawPath || ".");
 	return hyperlink(styledText, pathToFileURL(absolutePath).href);
 }
 
-export function renderToolPathText(rawPath: unknown, theme: any, cwd?: string, options?: { emptyFallback?: string }, hyperlinks = getCapabilities().hyperlinks): string {
+export function renderToolPathText(rawPath: unknown, theme: any, options?: { emptyFallback?: string }, hyperlinks = getCapabilities().hyperlinks): string {
 	const value = typeof rawPath === "string" ? rawPath : rawPath == null ? "" : String(rawPath);
 	const displayPath = value || options?.emptyFallback;
 	if (!displayPath) return theme.fg("accent", "");
-	return linkPath(theme.fg("accent", shortenPath(displayPath)), displayPath, cwd, hyperlinks);
+	return linkPath(theme.fg("accent", shortenPath(displayPath)), displayPath, hyperlinks);
 }
 
-export function readCallText(args: any, theme: any, cwd?: string, hyperlinks?: boolean): string {
+export function readCallText(args: any, theme: any, hyperlinks?: boolean): string {
 	const range = args?.offset || args?.limit ? `:${args.offset ?? 1}${args.limit ? `-${Number(args.offset ?? 1) + Number(args.limit) - 1}` : ""}` : "";
-	return `${toolLabel(theme, "Read ")}${renderToolPathText(args?.path ?? args?.file_path ?? "", theme, cwd, undefined, hyperlinks)}${range ? theme.fg("accent", range) : ""}`;
+	return `${toolLabel(theme, "Read ")}${renderToolPathText(args?.path ?? args?.file_path ?? "", theme, undefined, hyperlinks)}${range ? theme.fg("accent", range) : ""}`;
 }
 
-export function bashCallText(args: any, theme: any, cwd?: string): string {
-	const max = Math.max(20, Math.floor(settingNumber("commandPreviewChars", 96, cwd)));
+export function bashCallText(args: any, theme: any): string {
+	const max = Math.max(20, Math.floor(settingNumber("commandPreviewChars", 96)));
 	const rawCommand = typeof args?.command === "string" ? args.command : "";
-	const command = truncateText(rawCommand, max, cwd);
+	const command = truncateText(rawCommand, max);
 	const commandLines = command.split(/\r?\n/);
 	const [firstLine = "", ...continuationLines] = commandLines;
 	const styledFirstLine = theme.fg("accent", firstLine);
@@ -313,12 +313,12 @@ export function isGitDiffCommand(command: unknown): boolean {
 	return /(?:^|[;&|()]\s*)(?:(?:env\s+(?:-\S+\s+)*(?:[A-Za-z_][A-Za-z0-9_]*=\S+\s+)*)|(?:command\s+))*git(?:\s+(?!--?diff\b)(?:-[A-Za-z]\S*|--\S+)(?:\s+(?!diff(?:\s|$))\S+)*)*\s+diff(?:\s|$)/.test(normalized);
 }
 
-export function readOnlyCallText(toolName: string, args: any, theme: any, cwd?: string, hyperlinks?: boolean): string {
-	if (toolName === "ls") return `${toolLabel(theme, `${toolName} `)}${renderToolPathText(args?.path ?? ".", theme, cwd, undefined, hyperlinks)}`;
+export function readOnlyCallText(toolName: string, args: any, theme: any, hyperlinks?: boolean): string {
+	if (toolName === "ls") return `${toolLabel(theme, `${toolName} `)}${renderToolPathText(args?.path ?? ".", theme, undefined, hyperlinks)}`;
 	const query = args?.pattern ?? args?.glob ?? args?.path ?? args?.query ?? "";
 	const rendered = args?.pattern === undefined && args?.glob === undefined && typeof args?.path === "string"
-		? renderToolPathText(args.path, theme, cwd, undefined, hyperlinks)
-		: theme.fg("accent", clipLine(String(query), cwd));
+		? renderToolPathText(args.path, theme, undefined, hyperlinks)
+		: theme.fg("accent", clipLine(String(query)));
 	return `${toolLabel(theme, `${toolName} `)}${rendered}`;
 }
 

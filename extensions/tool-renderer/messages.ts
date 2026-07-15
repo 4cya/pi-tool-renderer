@@ -21,13 +21,13 @@ import { frameGlyphs, glyphs } from "./glyphs.js";
 import { FALLBACK_THEME, stackPrefix, toolLabel, treeConnector } from "./theme.js";
 import { makeTruncatedLines } from "./text.js";
 
-const USER_MESSAGE_PATCH_SYMBOL = Symbol.for("vstack.pi-tool-renderer.user-message-patch");
-const USER_MESSAGE_BOX_STATE_SYMBOL = Symbol.for("vstack.pi-tool-renderer.user-message-box-state");
-const ASSISTANT_MESSAGE_PATCH_SYMBOL = Symbol.for("vstack.pi-tool-renderer.assistant-message-patch");
-const CUSTOM_MESSAGE_SPACING_PATCH_SYMBOL = Symbol.for("vstack.pi-tool-renderer.custom-message-spacing-patch");
-const COMPACTION_SUMMARY_RENDERER_PATCH_SYMBOL = Symbol.for("vstack.pi-tool-renderer.compaction-summary-renderer-patch");
-const SKILL_INVOCATION_RENDERER_PATCH_SYMBOL = Symbol.for("vstack.pi-tool-renderer.skill-invocation-renderer-patch");
-const MARKDOWN_CODE_BLOCK_PATCH_SYMBOL = Symbol.for("vstack.pi-tool-renderer.markdown-code-block-patch");
+const USER_MESSAGE_PATCH_SYMBOL = Symbol.for("pi-tool-renderer.user-message-patch");
+const USER_MESSAGE_BOX_STATE_SYMBOL = Symbol.for("pi-tool-renderer.user-message-box-state");
+const ASSISTANT_MESSAGE_PATCH_SYMBOL = Symbol.for("pi-tool-renderer.assistant-message-patch");
+const CUSTOM_MESSAGE_SPACING_PATCH_SYMBOL = Symbol.for("pi-tool-renderer.custom-message-spacing-patch");
+const COMPACTION_SUMMARY_RENDERER_PATCH_SYMBOL = Symbol.for("pi-tool-renderer.compaction-summary-renderer-patch");
+const SKILL_INVOCATION_RENDERER_PATCH_SYMBOL = Symbol.for("pi-tool-renderer.skill-invocation-renderer-patch");
+const MARKDOWN_CODE_BLOCK_PATCH_SYMBOL = Symbol.for("pi-tool-renderer.markdown-code-block-patch");
 
 const OSC133_ZONE_START = "\x1b]133;A\x07";
 const OSC133_ZONE_END = "\x1b]133;B\x07";
@@ -72,13 +72,8 @@ function applyPromptZoneMarkers(lines: string[], markers: PromptZoneMarkers): st
 	return marked;
 }
 
-function renderUserMessageBorder(lines: string[], width: number, theme: any, cwd?: string, forcePromptZone = false): string[] {
+function renderUserMessageBorder(lines: string[], width: number, theme: any, forcePromptZone = false): string[] {
 	if (lines.length === 0 || width < 4) return lines;
-	// Pi wraps user messages with OSC 133 prompt-zone markers. With compact
-	// padding, a single-line message can carry start/end/final markers on the
-	// content row; terminals that honor OSC 133 then treat the middle of the box
-	// as prompt chrome. Strip those markers from the body and rewrap the whole
-	// framed card so the terminal sees one stable prompt zone.
 	const unwrapped = stripPromptZoneMarkers(lines);
 	if (forcePromptZone) {
 		unwrapped.markers.start = true;
@@ -86,8 +81,8 @@ function renderUserMessageBorder(lines: string[], width: number, theme: any, cwd
 		unwrapped.markers.final = true;
 	}
 	const innerWidth = Math.max(1, width - 2);
-	const frame = frameGlyphs(cwd);
-	const prompt = glyphs(cwd).prompt;
+	const frame = frameGlyphs();
+	const prompt = glyphs().prompt;
 	const border = (text: string) => ansiGreen(text);
 	const marker = (text: string) => ansiRed(text);
 	const topBorder = () => {
@@ -137,12 +132,8 @@ function safeCtxTheme(ctx?: ExtensionContext): any {
 
 export const __test = { applyPromptZoneMarkers, renderRawUserMessageLines, renderStyledCodeBlock, renderUserMessageBorder, safeCtxCwd, safeCtxHasUI, safeCtxTheme, stripPromptZoneMarkers };
 
-function appendUserMessageBreak(lines: string[], width: number, cwd?: string): string[] {
-	if (lines.length === 0 || !settingBoolean("userMessageTrailingBlankLine", true, cwd)) return lines;
-	// A visual blank row does not need to fill the terminal width. Keeping it empty
-	// avoids writing a printable character into the last column, which can trigger
-	// auto-wrap/scroll flashes in tmux and some terminal emulators when streaming
-	// output is already sitting on the bottom row.
+function appendUserMessageBreak(lines: string[], width: number): string[] {
+	if (lines.length === 0 || !settingBoolean("userMessageTrailingBlankLine", true)) return lines;
 	return [...lines, ""];
 }
 
@@ -177,16 +168,15 @@ export function installUserMessageRenderer(pi: ExtensionAPI, UserMessageComponen
 		prototype[USER_MESSAGE_PATCH_SYMBOL] = state;
 		prototype.render = function compactUserMessageRender(this: any, width: number): string[] {
 			const ctx = state?.activeCtx;
-			const cwd = safeCtxCwd(ctx);
 			const hasUI = safeCtxHasUI(ctx);
-			const compact = hasUI && settingBoolean("compactUserMessages", true, cwd);
+			const compact = hasUI && settingBoolean("compactUserMessages", true);
 
 			if (compact && width >= 4) {
 				const theme = safeCtxTheme(ctx);
-				const frameWidth = stableRenderWidth(width, cwd);
+				const frameWidth = stableRenderWidth(width);
 				const rawLines = renderRawUserMessageLines(this, Math.max(1, frameWidth - 2), theme);
 				if (rawLines) {
-					return appendUserMessageBreak(renderUserMessageBorder(rawLines, frameWidth, theme, cwd, true), width, cwd);
+					return appendUserMessageBreak(renderUserMessageBorder(rawLines, frameWidth, theme, true), width);
 				}
 			}
 
@@ -216,13 +206,13 @@ export function installUserMessageRenderer(pi: ExtensionAPI, UserMessageComponen
 
 				if (compact && width >= 4) {
 					const theme = safeCtxTheme(ctx);
-					const frameWidth = stableRenderWidth(width, cwd);
+					const frameWidth = stableRenderWidth(width);
 					const lines = state!.originalRender.call(this, Math.max(1, frameWidth - 2));
-					return appendUserMessageBreak(renderUserMessageBorder(lines, frameWidth, theme, cwd), width, cwd);
+					return appendUserMessageBreak(renderUserMessageBorder(lines, frameWidth, theme), width);
 				}
 			}
 
-			return appendUserMessageBreak(state!.originalRender.call(this, width), width, cwd);
+			return appendUserMessageBreak(state!.originalRender.call(this, width), width);
 		};
 	}
 
@@ -277,8 +267,7 @@ export function installAssistantMessageRenderer(pi: ExtensionAPI, AssistantMessa
 		};
 		prototype.updateContent = function alignedAssistantUpdateContent(this: any, message: any): void {
 			state!.originalUpdateContent.call(this, message);
-			const cwd = safeCtxCwd(state?.activeCtx);
-			if (settingBoolean("alignAssistantMessages", true, cwd)) alignAssistantContent(this);
+			if (settingBoolean("alignAssistantMessages", true)) alignAssistantContent(this);
 		};
 	}
 
@@ -312,8 +301,7 @@ export function installCompactionSummaryRenderer(pi: ExtensionAPI, Component: an
 		prototype[COMPACTION_SUMMARY_RENDERER_PATCH_SYMBOL] = state;
 		prototype.updateDisplay = function compactCompactionSummaryDisplay(this: any): void {
 			const ctx = state?.activeCtx;
-			const cwd = safeCtxCwd(ctx);
-			if (!settingBoolean("compactCompactionMessages", true, cwd)) {
+			if (!settingBoolean("compactCompactionMessages", true)) {
 				state!.originalUpdateDisplay.call(this);
 				return;
 			}
@@ -334,7 +322,7 @@ export function installCompactionSummaryRenderer(pi: ExtensionAPI, Component: an
 			this.addChild?.(makeTruncatedLines(`${stackPrefix(theme)}${toolLabel(theme, "Compacted ")}${theme.fg("success", `${tokenStr} tokens`)}${hint}`));
 
 			if (expanded) {
-				this.addChild?.(makeTruncatedLines(`${treeConnector(theme, "└", cwd)}${theme.fg("muted", "Summary")}`));
+				this.addChild?.(makeTruncatedLines(`${treeConnector(theme, "└")}${theme.fg("muted", "Summary")}`));
 				this.addChild?.(new Markdown(summary, 0, 0, this?.markdownTheme ?? getMarkdownTheme(), {
 					color: (text: string) => theme.fg("customMessageText", text),
 				}));
@@ -398,8 +386,7 @@ export function installSkillInvocationRenderer(pi: ExtensionAPI, Component: any)
 		prototype[SKILL_INVOCATION_RENDERER_PATCH_SYMBOL] = state;
 		prototype.updateDisplay = function compactSkillInvocationDisplay(this: any): void {
 			const ctx = state?.activeCtx;
-			const cwd = safeCtxCwd(ctx);
-			if (!settingBoolean("compactSkillMessages", true, cwd)) {
+			if (!settingBoolean("compactSkillMessages", true)) {
 				state!.originalUpdateDisplay.call(this);
 				return;
 			}
@@ -419,7 +406,7 @@ export function installSkillInvocationRenderer(pi: ExtensionAPI, Component: any)
 			this.addChild?.(makeTruncatedLines(`${stackPrefix(th)}${toolLabel(th, "Skill ")}${th.fg("accent", name)}${hint}`));
 
 			if (expanded) {
-				this.addChild?.(makeTruncatedLines(`${treeConnector(th, "└", cwd)}${th.fg("muted", "Content")}`));
+				this.addChild?.(makeTruncatedLines(`${treeConnector(th, "└")}${th.fg("muted", "Content")}`));
 				this.addChild?.(new Markdown(`**${name}**\n\n${content}`, 0, 0, this?.markdownTheme ?? getMarkdownTheme(), {
 					color: (text: string) => th.fg("customMessageText", text),
 				}));
@@ -467,7 +454,7 @@ function padAnsiLine(line: string, width: number): string {
 }
 
 function renderStyledCodeBlock(token: any, width: number, markdownTheme: any, ctx?: ExtensionContext): string[] {
-	const contentWidth = stableRenderWidth(width, safeCtxCwd(ctx));
+	const contentWidth = stableRenderWidth(width);
 	const rawLang = typeof token?.lang === "string" ? token.lang.trim() : "";
 	const lang = rawLang.split(/\s+/)[0] || undefined;
 	const code = typeof token?.text === "string" ? token.text : "";
@@ -507,8 +494,7 @@ export function installMarkdownCodeBlockRenderer(pi: ExtensionAPI): void {
 		prototype[MARKDOWN_CODE_BLOCK_PATCH_SYMBOL] = state;
 		prototype.renderToken = function styledCodeBlockRenderToken(this: any, token: any, width: number, nextTokenType?: string, styleContext?: unknown): string[] {
 			const ctx = state?.activeCtx;
-			const cwd = safeCtxCwd(ctx);
-			if (token?.type === "code" && settingBoolean("styledCodeBlocks", true, cwd)) {
+			if (token?.type === "code" && settingBoolean("styledCodeBlocks", true)) {
 				const codeLines = renderStyledCodeBlock(token, width, this?.theme, ctx);
 				if (nextTokenType && nextTokenType !== "space") return [...codeLines, ""];
 				return codeLines;

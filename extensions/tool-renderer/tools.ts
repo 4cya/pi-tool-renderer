@@ -91,8 +91,8 @@ function bashLiveTailState(context: any): BashLiveTailState {
 	const state = context?.state;
 	if (!state || typeof state !== "object") return {};
 	const record = state as Record<string, unknown>;
-	if (!record.vstackBashLiveTail || typeof record.vstackBashLiveTail !== "object") record.vstackBashLiveTail = {};
-	return record.vstackBashLiveTail as BashLiveTailState;
+	if (!record.bashLiveTail || typeof record.bashLiveTail !== "object") record.bashLiveTail = {};
+	return record.bashLiveTail as BashLiveTailState;
 }
 
 function markBashStarted(context: any): BashLiveTailState {
@@ -122,14 +122,15 @@ function scheduleBashLiveTailRerender(state: BashLiveTailState, context: any, de
 	state.timer.unref?.();
 }
 
-function renderBashTail(output: string, limit: number, theme: any, cwd?: string): string {
+function renderBashTail(output: string, limit: number, theme: any): string {
 	const trimmed = output.replace(/(?:\r?\n)+$/, "");
 	if (!trimmed) return "";
-	const tailLines = preview(trimmed, limit, "tail", cwd).split(/\r?\n/);
+	const tailLines = preview(trimmed, limit, "tail").split(/\r?\n/);
 	return tailLines.map((line) => theme.fg("dim", line)).join("\n");
 }
 
-export function registerRead(pi: ExtensionAPI, agent: any, cwd: string): void {
+export function registerRead(pi: ExtensionAPI, agent: any): void {
+	const cwd = process.cwd();
 	const original = getBuiltInTool(agent, cwd, "read");
 	if (!original) return;
 	pi.registerTool({
@@ -142,25 +143,25 @@ export function registerRead(pi: ExtensionAPI, agent: any, cwd: string): void {
 			return getBuiltInTool(agent, contextCwd(context, cwd), "read").execute(id, params, signal, onUpdate);
 		},
 		renderCall(args: any, theme: any, context: any) {
-			return renderPendingCall(readCallText(args ?? {}, theme, context?.cwd ?? cwd), theme, context, cwd);
+			return renderPendingCall(readCallText(args ?? {}, theme), theme, context);
 		},
 		renderResult(result: any, { expanded, isPartial }: any, theme: any, context: any) {
-			const stacked = stackToolCalls(context?.cwd ?? cwd);
-			if (stacked) return renderStackedToolResult("read", result, isPartial, expanded, theme, context, cwd);
-			const call = readCallText(context?.args ?? {}, theme, context?.cwd ?? cwd);
+			const stacked = stackToolCalls();
+			if (stacked) return renderStackedToolResult("read", result, isPartial, expanded, theme, context);
+			const call = readCallText(context?.args ?? {}, theme);
 			if (isPartial) return renderPendingDetail("reading…", theme);
 			clearBlink(context);
 			const content = textContent(result);
 			const count = lineCount(content);
 			const summary = readResultSummary(result, context?.args ?? {}, theme);
-			const mode = readOutputMode(context?.cwd ?? cwd);
+			const mode = readOutputMode();
 			if (mode === "hidden") return makeEmpty();
 			let text = `${stackPrefix(theme)}${call}${theme.fg("dim", " · ")}${summary}`;
 			if (mode === "preview" && expanded && content) {
-				const limit = Math.max(1, Math.floor(settingNumber("readPreviewLines", 80, context?.cwd)));
-				text += `\n${preview(content, limit, "head", context?.cwd)
+				const limit = Math.max(1, Math.floor(settingNumber("readPreviewLines", 80)));
+				text += `\n${preview(content, limit, "head")
 					.split(/\r?\n/)
-					.map((line) => `${treeConnector(theme, "│")}${theme.fg("dim", line)}`)
+					.map((line: string) => `${treeConnector(theme, "│")}${theme.fg("dim", line)}`)
 					.join("\n")}`;
 				if (count > limit) text += `\n${treeConnector(theme, "│")}${theme.fg("muted", `… ${count - limit} more line(s)`)}`;
 			}
@@ -169,7 +170,8 @@ export function registerRead(pi: ExtensionAPI, agent: any, cwd: string): void {
 	});
 }
 
-export function registerBash(pi: ExtensionAPI, agent: any, cwd: string): void {
+export function registerBash(pi: ExtensionAPI, agent: any): void {
+	const cwd = process.cwd();
 	const original = getBuiltInTool(agent, cwd, "bash");
 	if (!original) return;
 	pi.registerTool({
@@ -183,25 +185,24 @@ export function registerBash(pi: ExtensionAPI, agent: any, cwd: string): void {
 		},
 		renderCall(args: any, theme: any, context: any) {
 			markBashStarted(context);
-			return renderPendingCall(bashCallText(args ?? {}, theme, context?.cwd ?? cwd), theme, context, cwd);
+			return renderPendingCall(bashCallText(args ?? {}, theme), theme, context);
 		},
 		renderResult(result: any, { expanded, isPartial }: any, theme: any, context: any) {
-			const stacked = stackToolCalls(context?.cwd ?? cwd);
-			if (stacked) return renderStackedToolResult("bash", result, isPartial, expanded, theme, context, cwd);
-			const effectiveCwd = context?.cwd ?? cwd;
-			const call = bashCallText(context?.args ?? {}, theme, effectiveCwd);
+			const stacked = stackToolCalls();
+			if (stacked) return renderStackedToolResult("bash", result, isPartial, expanded, theme, context);
+			const call = bashCallText(context?.args ?? {}, theme);
 			const output = textContent(result);
 			const liveTailState = markBashStarted(context);
 			if (isPartial) {
 				const trimmedOutput = output.trim();
-				const partialMode = bashOutputMode(effectiveCwd);
+				const partialMode = bashOutputMode();
 				if (partialMode !== "summary" && partialMode !== "hidden" && trimmedOutput) {
-					const delayMs = bashLiveOutputDelayMs(effectiveCwd);
+					const delayMs = bashLiveOutputDelayMs();
 					const startedAt = liveTailState.startedAt ?? Date.now();
 					if (Date.now() - startedAt >= delayMs) {
 						clearBashLiveTailTimer(liveTailState);
 						liveTailState.tailShown = true;
-						const tailText = renderBashTail(output, bashLiveTailLines(effectiveCwd), theme, effectiveCwd);
+						const tailText = renderBashTail(output, bashLiveTailLines(), theme);
 						if (tailText) return makeTruncatedLines(tailText);
 					}
 					scheduleBashLiveTailRerender(liveTailState, context, delayMs);
@@ -216,30 +217,30 @@ export function registerBash(pi: ExtensionAPI, agent: any, cwd: string): void {
 			let summary = exit !== null && exit !== 0 ? theme.fg("error", exitLabel) : theme.fg("success", exitLabel);
 			summary += theme.fg("dim", ` · ${count} line${count === 1 ? "" : "s"}`);
 			if (resultTruncated(result)) summary += theme.fg("warning", " · truncated");
-			const mode = bashOutputMode(effectiveCwd);
+			const mode = bashOutputMode();
 			if (mode === "hidden") return makeEmpty();
 			let text = `${stackPrefix(theme)}${call}${theme.fg("dim", " · ")}${summary}`;
-			const renderDiffs = shouldRenderBashDiffsForCommand(context?.args ?? {}, effectiveCwd);
-			const suppressDiffOutput = output ? suppressReadOnlyBashDiffOutput(context?.args ?? {}, output, effectiveCwd) : false;
-			const diffPreview = output && mode !== "summary" ? renderBashDiffOutput(output, theme, expanded, effectiveCwd, renderDiffs) : null;
+			const renderDiffs = shouldRenderBashDiffsForCommand(context?.args ?? {});
+			const suppressDiffOutput = output ? suppressReadOnlyBashDiffOutput(context?.args ?? {}, output) : false;
+			const diffPreview = output && mode !== "summary" ? renderBashDiffOutput(output, theme, expanded, renderDiffs) : null;
 			if (diffPreview) {
 				text += `\n${diffPreview}`;
 			} else if (!suppressDiffOutput && mode === "preview" && output) {
-				const limit = Math.max(1, Math.floor(settingNumber(expanded ? "bashPreviewLines" : "bashCollapsedLines", expanded ? 80 : 10, effectiveCwd)));
-				text += `\n${preview(output, limit, "tail", effectiveCwd)
+				const limit = Math.max(1, Math.floor(settingNumber(expanded ? "bashPreviewLines" : "bashCollapsedLines", expanded ? 80 : 10)));
+				text += `\n${preview(output, limit, "tail")
 					.split(/\r?\n/)
-					.map((line) => theme.fg("dim", line))
+					.map((line: string) => theme.fg("dim", line))
 					.join("\n")}`;
 				if (count > limit) text += `\n${theme.fg("muted", `… ${count - limit} older line(s)`)}`;
 			} else if (!suppressDiffOutput && mode === "opencode" && expanded && output) {
-				const limit = Math.max(1, Math.floor(settingNumber("bashPreviewLines", 80, effectiveCwd)));
-				text += `\n${preview(output, limit, "tail", effectiveCwd)
+				const limit = Math.max(1, Math.floor(settingNumber("bashPreviewLines", 80)));
+				text += `\n${preview(output, limit, "tail")
 					.split(/\r?\n/)
-					.map((line) => theme.fg("dim", line))
+					.map((line: string) => theme.fg("dim", line))
 					.join("\n")}`;
 				if (count > limit) text += `\n${theme.fg("muted", `… ${count - limit} older line(s)`)}`;
 			} else if (!suppressDiffOutput && mode === "opencode" && liveTailState.tailShown && output) {
-				const tailText = renderBashTail(output, bashLiveTailLines(effectiveCwd), theme, effectiveCwd);
+				const tailText = renderBashTail(output, bashLiveTailLines(), theme);
 				if (tailText) text += `\n${tailText}`;
 			}
 			return makeTruncatedLines(text);
@@ -247,7 +248,8 @@ export function registerBash(pi: ExtensionAPI, agent: any, cwd: string): void {
 	});
 }
 
-export function registerEdit(pi: ExtensionAPI, agent: any, cwd: string): void {
+export function registerEdit(pi: ExtensionAPI, agent: any): void {
+	const cwd = process.cwd();
 	const original = getBuiltInTool(agent, cwd, "edit");
 	if (!original) return;
 	pi.registerTool({
@@ -272,28 +274,29 @@ export function registerEdit(pi: ExtensionAPI, agent: any, cwd: string): void {
 				const previewComponent = renderMutationCallPreview("Edit", String(targetPath), diffs, theme, context, effectiveCwd);
 				if (componentHasVisibleLines(previewComponent)) return previewComponent;
 			}
-			return renderPendingCall(`${toolLabel(theme, "Edit ")}${renderToolPathText(targetPath, theme, effectiveCwd)}`, theme, context, cwd);
+			return renderPendingCall(`${toolLabel(theme, "Edit ")}${renderToolPathText(targetPath, theme)}`, theme, context);
 		},
 		renderResult(result: any, { expanded, isPartial }: any, theme: any, context: any) {
 			const args = context?.args ?? {};
 			const targetPath = args.path ?? args.file_path ?? "";
-			const call = `${toolLabel(theme, "Edit ")}${renderToolPathText(targetPath, theme, context?.cwd ?? cwd)}`;
+			const call = `${toolLabel(theme, "Edit ")}${renderToolPathText(targetPath, theme)}`;
 			if (isPartial) return renderPendingDetail("editing…", theme);
 			clearBlink(context);
-			const structured = result?.details?.vstackDiff as StructuredDiff | undefined;
+			const structured = result?.details?.toolDiff as StructuredDiff | undefined;
 			if (context?.isError || result?.isError) {
 				const errorText = textContent(result).split(/\r?\n/)[0] || "edit failed";
 				return makeTruncatedLines(`${stackPrefix(theme)}${call}${theme.fg("dim", " · ")}${theme.fg("error", errorText)}`);
 			}
-			const summary = structured ? diffSummary(structured, theme, context?.cwd ?? cwd) : theme.fg("success", "applied");
+			const summary = structured ? diffSummary(structured, theme) : theme.fg("success", "applied");
 			let text = `${stackPrefix(theme)}${call}${theme.fg("dim", " · ")}${summary}`;
-			if (structured) text += `\n${renderStructuredDiff(structured, theme, expanded, context?.cwd ?? cwd, undefined, targetPath)}`;
+			if (structured) text += `\n${renderStructuredDiff(structured, theme, expanded, undefined, targetPath)}`;
 			return makeTruncatedLines(text);
 		},
 	});
 }
 
-export function registerWrite(pi: ExtensionAPI, agent: any, cwd: string): void {
+export function registerWrite(pi: ExtensionAPI, agent: any): void {
+	const cwd = process.cwd();
 	const original = getBuiltInTool(agent, cwd, "write");
 	if (!original) return;
 	pi.registerTool({
@@ -321,30 +324,31 @@ export function registerWrite(pi: ExtensionAPI, agent: any, cwd: string): void {
 				const previewComponent = renderMutationCallPreview(label, String(targetPath), [diff], theme, context, effectiveCwd);
 				if (componentHasVisibleLines(previewComponent)) return previewComponent;
 			}
-			return renderPendingCall(`${toolLabel(theme, "Write ")}${renderToolPathText(targetPath, theme, effectiveCwd)} ${theme.fg("dim", `· ${lineTotal} lines`)}`, theme, context, cwd);
+			return renderPendingCall(`${toolLabel(theme, "Write ")}${renderToolPathText(targetPath, theme)} ${theme.fg("dim", `· ${lineTotal} lines`)}`, theme, context);
 		},
 		renderResult(result: any, { expanded, isPartial }: any, theme: any, context: any) {
 			const args = context?.args ?? {};
 			const targetPath = args.path ?? args.file_path ?? "";
 			const lineTotal = lineCount(args.content ?? "");
-			const label = result?.details?.vstackDiffWasNewFile ? "Create " : "Write ";
-			const call = `${toolLabel(theme, label)}${renderToolPathText(targetPath, theme, context?.cwd ?? cwd)} ${theme.fg("dim", `· ${lineTotal} lines`)}`;
+			const label = result?.details?.diffWasNewFile ? "Create " : "Write ";
+			const call = `${toolLabel(theme, label)}${renderToolPathText(targetPath, theme)} ${theme.fg("dim", `· ${lineTotal} lines`)}`;
 			if (isPartial) return renderPendingDetail("writing…", theme);
 			clearBlink(context);
-			const structured = result?.details?.vstackDiff as StructuredDiff | undefined;
+			const structured = result?.details?.toolDiff as StructuredDiff | undefined;
 			if (context?.isError || result?.isError) {
 				const errorText = textContent(result).split(/\r?\n/)[0] || "write failed";
 				return makeTruncatedLines(`${stackPrefix(theme)}${call}${theme.fg("dim", " · ")}${theme.fg("error", errorText)}`);
 			}
-			const summary = structured ? diffSummary(structured, theme, context?.cwd ?? cwd) : theme.fg("success", "written");
+			const summary = structured ? diffSummary(structured, theme) : theme.fg("success", "written");
 			let text = `${stackPrefix(theme)}${call}${theme.fg("dim", " · ")}${summary}`;
-			if (structured) text += `\n${renderStructuredDiff(structured, theme, expanded, context?.cwd ?? cwd, undefined, targetPath)}`;
+			if (structured) text += `\n${renderStructuredDiff(structured, theme, expanded, undefined, targetPath)}`;
 			return makeTruncatedLines(text);
 		},
 	});
 }
 
-export function registerReadOnly(pi: ExtensionAPI, agent: any, cwd: string, toolName: "grep" | "find" | "ls"): void {
+export function registerReadOnly(pi: ExtensionAPI, agent: any, toolName: "grep" | "find" | "ls"): void {
+	const cwd = process.cwd();
 	const original = getBuiltInTool(agent, cwd, toolName);
 	if (!original) return;
 	pi.registerTool({
@@ -357,12 +361,12 @@ export function registerReadOnly(pi: ExtensionAPI, agent: any, cwd: string, tool
 			return getBuiltInTool(agent, contextCwd(context, cwd), toolName).execute(id, params, signal, onUpdate);
 		},
 		renderCall(args: any, theme: any, context: any) {
-			return renderPendingCall(readOnlyCallText(toolName, args ?? {}, theme, context?.cwd ?? cwd), theme, context, cwd);
+			return renderPendingCall(readOnlyCallText(toolName, args ?? {}, theme), theme, context);
 		},
 		renderResult(result: any, { expanded, isPartial }: any, theme: any, context: any) {
-			const stacked = stackToolCalls(context?.cwd ?? cwd);
-			if (stacked) return renderStackedToolResult(toolName, result, isPartial, expanded, theme, context, cwd);
-			const call = readOnlyCallText(toolName, context?.args ?? {}, theme, context?.cwd ?? cwd);
+			const stacked = stackToolCalls();
+			if (stacked) return renderStackedToolResult(toolName, result, isPartial, expanded, theme, context);
+			const call = readOnlyCallText(toolName, context?.args ?? {}, theme);
 			if (isPartial) return renderPendingDetail(`${toolName}…`, theme);
 			clearBlink(context);
 			const output = textContent(result);
@@ -374,17 +378,17 @@ export function registerReadOnly(pi: ExtensionAPI, agent: any, cwd: string, tool
 					: `${count} file${count === 1 ? "" : "s"}`;
 			let summary = count === 0 ? theme.fg("muted", toolName === "grep" ? "no matches" : toolName === "ls" ? "empty" : "no files") : theme.fg("success", label);
 			if (resultTruncated(result)) summary += theme.fg("warning", " · truncated");
-			const mode = searchOutputMode(context?.cwd ?? cwd);
+			const mode = searchOutputMode();
 			if (mode === "hidden") return makeEmpty();
 			let text = `${stackPrefix(theme)}${call}${theme.fg("dim", " · ")}${summary}`;
 			if (mode === "preview" && expanded && output) {
 				if (toolName === "find" || toolName === "ls") {
-					text += `\n${renderPathListPreview(output, toolName, theme, expanded, context?.cwd)}`;
+					text += `\n${renderPathListPreview(output, toolName, theme, expanded)}`;
 				} else {
-					const limit = Math.max(1, Math.floor(settingNumber("searchPreviewLines", 80, context?.cwd)));
-					text += `\n${preview(output, limit, "head", context?.cwd)
+					const limit = Math.max(1, Math.floor(settingNumber("searchPreviewLines", 80)));
+					text += `\n${preview(output, limit, "head")
 						.split(/\r?\n/)
-						.map((line) => `${treeConnector(theme, "│")}${theme.fg("dim", line)}`)
+						.map((line: string) => `${treeConnector(theme, "│")}${theme.fg("dim", line)}`)
 						.join("\n")}`;
 					if (count > limit) text += `\n${treeConnector(theme, "│")}${theme.fg("muted", `… ${count - limit} more result line(s)`)}`;
 				}
@@ -393,4 +397,3 @@ export function registerReadOnly(pi: ExtensionAPI, agent: any, cwd: string, tool
 		},
 	});
 }
-
