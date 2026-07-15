@@ -23,7 +23,7 @@ Defaults leave `edit`/`write` on Pi's built-in renderers. Enable **Render edits/
 ## Install
 
 ```bash
-pi install git:github.com/4cya/pi-tool-renderer@main
+pi install git:github.com/4cya/pi-tool-renderer
 ```
 
 Restart Pi after installation.
